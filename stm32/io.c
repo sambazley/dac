@@ -21,12 +21,16 @@
 #include "dac.h"
 #include "spdif.h"
 #include "uart.h"
+#include "usb.h"
 #include <stm32f0xx.h>
 
 /* GPIOA */
 #define OUTPUT_EN 6
 #define I2S_SEL 8
 #define INPUT_SEL 1
+
+/* GPIOF */
+#define DIR_ERROR 0
 
 static void input_select_setup()
 {
@@ -41,8 +45,12 @@ static void input_select_setup()
 void io_enable()
 {
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+	RCC->AHBENR |= RCC_AHBENR_GPIOFEN;
+
 	GPIOA->MODER &= ~(3 << (2 * OUTPUT_EN));
 	GPIOA->MODER |= 1 << (2 * OUTPUT_EN);
+
+	GPIOF->MODER &= ~(3 << (2 * DIR_ERROR));
 
 	input_select_setup();
 
@@ -58,8 +66,14 @@ void io_enable()
 	while (1) {
 		if (GPIOB->IDR & (1 << INPUT_SEL)) {
 			GPIOB->ODR &= ~(1 << I2S_SEL);
+			usb_audio_en(1);
 		} else {
-			GPIOB->ODR |= 1 << I2S_SEL;
+			if (GPIOF->IDR & (1 << DIR_ERROR)) {
+				GPIOB->ODR &= ~(1 << I2S_SEL);
+				usb_audio_en(0);
+			} else {
+				GPIOB->ODR |= 1 << I2S_SEL;
+			}
 		}
 	}
 }

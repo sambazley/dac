@@ -560,6 +560,7 @@ static void on_control_in()
 	}
 }
 
+static volatile int audio_en;
 static volatile int16_t usb_audio_ptr = 1;
 static volatile int16_t drop = 0, insert = 0;
 
@@ -567,6 +568,11 @@ static volatile int16_t drop = 0, insert = 0;
 #define DROP_COUNT 24
 
 static volatile uint16_t stopped_count;
+
+void usb_audio_en(int en)
+{
+	audio_en = en;
+}
 
 void usb_audio_half_sync()
 {
@@ -654,6 +660,12 @@ static void on_audio_data_in()
 
 	usb_audio_ptr += samples;
 	usb_audio_ptr %= USB_AUDIO_SAMPLE_COUNT;
+
+	if (!audio_en) {
+		for (int i = 0; i < USB_AUDIO_SAMPLE_COUNT; i++) {
+			usb_audio_data[i] = 0;
+		}
+	}
 
 	for (int i = 0; i < samples; i += 2) {
 		if (usb_audio_data[i]) {
