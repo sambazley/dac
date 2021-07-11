@@ -1,0 +1,3 @@
+[submodule "stm32/libstm32usb"]
+	path = stm32/libstm32usb
+	url = https://github.com/sambazley/libstm32usb

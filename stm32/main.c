@@ -22,6 +22,7 @@
 #include "spdif.h"
 #include "uart.h"
 #include "usb.h"
+#include <usblib.h>
 #include <stm32f0xx.h>
 
 static void rcc_init()
@@ -68,15 +69,18 @@ void boot()
 	spdif_init();
 	dac_init();
 
-	usb_init();
+	usb_impl_init();
 
 	int i = 3000000;
+
+	uint8_t usb_received_request = 1;
+
 	while (1) {
 		if (!usb_received_request && i-- == 0) {
 			break;
 		}
 
-		if (usb_selected_config != 0) {
+		if (usb_get_selected_config() != 0) {
 			break;
 		}
 	}

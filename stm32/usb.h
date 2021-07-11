@@ -17,21 +17,20 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#ifndef USB_H
-#define USB_H
+#ifndef USB_IMPL_H
+#define USB_IMPL_H
 
 #include <stdint.h>
 
 #define USB_AUDIO_SAMPLE_COUNT 960
 
-extern volatile uint8_t usb_selected_config;
-extern volatile uint8_t usb_received_request;
 extern volatile uint16_t usb_audio_data [USB_AUDIO_SAMPLE_COUNT];
 
-void usb_init();
 void usb_audio_en(int en);
 
 void usb_audio_half_sync();
 void usb_audio_complete_sync();
 
-#endif /* USB_H */
+void usb_impl_init();
+
+#endif /* USB_IMPL_H */

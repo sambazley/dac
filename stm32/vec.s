@@ -6,8 +6,8 @@ none: b .
 .section vectors
 .word _estack               /* stack address */
 .word Reset_Handler         /* Reset */
-.word Hard_Fault            /* NMI */
-.word none                  /* HardFault */
+.word none                  /* NMI */
+.word Hard_Fault            /* HardFault */
 .word none                  /* Reserved */
 .word none                  /* Reserved */
 .word none                  /* Reserved */
@@ -41,7 +41,7 @@ none: b .
 .word none                  /* 17 */
 .word none                  /* 18 */
 .word none                  /* 19 */
-.word none                  /* 19 */
+.word none                  /* 20 */
 .word none                  /* 21 */
 .word none                  /* 22 */
 .word none                  /* 23 */
