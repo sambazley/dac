@@ -22,13 +22,14 @@
 
 #include <stdint.h>
 
-#define USB_AUDIO_SAMPLE_COUNT 960
+#define USB_AUDIO_FRAME_COUNT 4
+
+#define USB_AUDIO_SAMPLE_COUNT (96 * USB_AUDIO_FRAME_COUNT)
 
 extern volatile uint16_t usb_audio_data [USB_AUDIO_SAMPLE_COUNT];
 
 void usb_audio_en(int en);
 
-void usb_audio_half_sync();
 void usb_audio_complete_sync();
 
 void usb_impl_init();

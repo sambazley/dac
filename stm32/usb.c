@@ -18,7 +18,6 @@
  */
 
 #include "usb.h"
-#include "io.h"
 #include "uart.h"
 #include <usblib.h>
 #include <stm32f0xx.h>
@@ -130,7 +129,7 @@ static const uint8_t config1_descriptor [] = {
 		0x24,                                       // bDescriptorType (CS_INTERFACE)
 		0x01,                                       // bDescriptorSubType (AS_GENERAL)
 		1,                                          // bTerminalLink
-		1,                                          // bDelay
+		USB_AUDIO_FRAME_COUNT / 2,                  // bDelay
 		0x01, 0x00,                                 // wFormatTag (PCM)
 
 		//format type descriptor
@@ -276,58 +275,79 @@ static struct usb_interface interfaces [] = {
 };
 
 static volatile int audio_en;
-static volatile int16_t usb_audio_ptr = 1;
-static volatile int16_t drop = 0, insert = 0;
-
-#define MARGIN 192
-#define DROP_COUNT 24
-
-static volatile uint16_t stopped_count;
 
 void usb_audio_en(int en)
 {
 	audio_en = en;
 }
 
-void usb_audio_half_sync()
-{
-	if (!stopped_count) {
-		usb_audio_ptr = MARGIN + 1;
-		drop = 0;
-		insert = 0;
-		return;
-	}
+static volatile uint16_t usb_audio_ptr = USB_AUDIO_SAMPLE_COUNT / 2 + 1;
+static volatile uint16_t stopped_count;
 
-	stopped_count--;
-
-	if (usb_audio_ptr > USB_AUDIO_SAMPLE_COUNT / 2 - MARGIN &&
-			usb_audio_ptr <= USB_AUDIO_SAMPLE_COUNT / 2) {
-		drop = DROP_COUNT;
-		insert = 0;
-	} else if (usb_audio_ptr > USB_AUDIO_SAMPLE_COUNT / 2 &&
-			usb_audio_ptr < USB_AUDIO_SAMPLE_COUNT / 2 + MARGIN) {
-		drop = 0;
-		insert = DROP_COUNT;
-	}
-}
+static volatile uint8_t i2s_count = 0;
+static volatile uint8_t usb_count = 0;
+static volatile float integral = 0.0f;
+static volatile float last_error = 0.0f;
+static volatile int8_t init_output = -1;
 
 void usb_audio_complete_sync()
 {
-	if (!stopped_count) {
-		usb_audio_ptr = USB_AUDIO_SAMPLE_COUNT / 2 + MARGIN + 1;
-		drop = 0;
-		insert = 0;
+	int16_t measure;
+	int16_t error;
+	int8_t output;
+
+	const float kp = 0.001f;
+	const float ki = 0.0001f;
+	const float kd = 0.0f;
+
+	float p, i, d;
+
+	if (stopped_count == 0) {
+		usb_count = 0;
+		i2s_count = 0;
+		usb_audio_ptr = USB_AUDIO_SAMPLE_COUNT / 2 + 1;
+		integral = 0.0f;
+		last_error = 0.0f;
 		return;
 	}
 
+	i2s_count++;
 	stopped_count--;
 
-	if (usb_audio_ptr > USB_AUDIO_SAMPLE_COUNT - MARGIN) {
-		drop = DROP_COUNT;
-		insert = 0;
-	} else if (usb_audio_ptr < MARGIN) {
-		drop = 0;
-		insert = DROP_COUNT;
+	if (init_output == -1) {
+		init_output = (CRS->CR >> CRS_CR_TRIM_Pos) & 0x3F;
+	}
+
+	measure = (int16_t) (usb_count * USB_AUDIO_SAMPLE_COUNT + usb_audio_ptr) -
+		(int16_t) (i2s_count * USB_AUDIO_SAMPLE_COUNT);
+
+	error = measure - USB_AUDIO_SAMPLE_COUNT / 2 - 1;
+
+	integral += error;
+
+	p = kp * error;
+	i = ki * integral;
+	d = kd * (last_error - error);
+
+	last_error = error;
+
+	output = p + i + d + init_output;
+
+	if (output < 0) {
+		output = 0;
+	} else if (output > 0x3f) {
+		output = 0x3f;
+	}
+
+	CRS->CR &= ~CRS_CR_AUTOTRIMEN;
+	CRS->CR = (CRS->CR & (~CRS_CR_TRIM)) | (output << CRS_CR_TRIM_Pos);
+
+	if (i2s_count < usb_count) {
+		usb_count -= i2s_count;
+		i2s_count -= i2s_count;
+	} else {
+		i2s_count -= usb_count;
+		usb_count -= usb_count;
 	}
 }
 
@@ -339,7 +359,13 @@ static void on_audio_data_in()
 	uint16_t samples = usb_ep_get_rx_count(1) / 2;
 	int r = 0, l = 0;
 
-	stopped_count = 10;
+	if (!audio_en) {
+		for (int i = 0; i < USB_AUDIO_SAMPLE_COUNT; i++) {
+			usb_audio_data[i] = 0;
+		}
+
+		return;
+	}
 
 	if (USB->EP1R & USB_EP_DTOG_RX) {
 		din = (int16_t *) usb_pma_addr(1, PMA_RX);
@@ -348,38 +374,14 @@ static void on_audio_data_in()
 	}
 
 	for (int i = 0; i < samples; i++) {
-#define dest usb_audio_data[((i + usb_audio_ptr) % USB_AUDIO_SAMPLE_COUNT)]
-		if (drop && i == 0) {
-			usb_audio_ptr -= 2;
-			if (usb_audio_ptr < 0) {
-				usb_audio_ptr += USB_AUDIO_SAMPLE_COUNT;
-			}
-			drop--;
-		}
-
-		dest = *(uint16_t *) &din[i];
-
-		if (insert && i == 1) {
-			usb_audio_ptr++;
-			int16_t interpolation = (din[i - 1] + din[i + 1]) / 2;
-			dest = *(uint16_t *) &interpolation;
-
-			usb_audio_ptr++;
-			int16_t interpolation2 = (din[i] + din[i + 2]) / 2;
-			dest = *(uint16_t *) &interpolation2;
-
-			insert--;
-		}
-#undef dest
+		usb_audio_data[(i + usb_audio_ptr) % USB_AUDIO_SAMPLE_COUNT] = din[i];
 	}
 
 	usb_audio_ptr += samples;
-	usb_audio_ptr %= USB_AUDIO_SAMPLE_COUNT;
 
-	if (!audio_en) {
-		for (int i = 0; i < USB_AUDIO_SAMPLE_COUNT; i++) {
-			usb_audio_data[i] = 0;
-		}
+	if (usb_audio_ptr >= USB_AUDIO_SAMPLE_COUNT) {
+		usb_audio_ptr -= USB_AUDIO_SAMPLE_COUNT;
+		usb_count++;
 	}
 
 	for (int i = 0; i < samples; i += 2) {
@@ -400,6 +402,10 @@ static void on_audio_data_in()
 		usb_audio_data[1] = 1;
 	} else if (l && !r) {
 		usb_audio_data[0] = 1;
+	}
+
+	if (r || l) {
+		stopped_count = 10;
 	}
 }
 
