@@ -218,7 +218,7 @@ static struct usb_descriptor descriptors [] = {
 };
 
 static void on_control_out_interface0(struct usb_interface *iface,
-		volatile struct usb_setup_packet *sp)
+		struct usb_setup_packet *sp)
 {
 	(void) iface;
 
@@ -236,7 +236,7 @@ enum {
 };
 
 static void on_control_out_interface1(struct usb_interface *iface,
-		volatile struct usb_setup_packet *sp)
+		struct usb_setup_packet *sp)
 {
 	volatile uint16_t *epr = USB_EP(1);
 
@@ -353,10 +353,10 @@ void usb_audio_complete_sync()
 
 volatile uint16_t usb_audio_data [USB_AUDIO_SAMPLE_COUNT] = {0};
 
-static void on_audio_data_in()
+static void on_audio_data_in(uint8_t *data, uint8_t len)
 {
-	int16_t *din;
-	uint16_t samples = usb_ep_get_rx_count(1) / 2;
+	int16_t *din = (int16_t *) data;
+	uint16_t samples = len / 2;
 	int r = 0, l = 0;
 
 	if (!audio_en) {
@@ -365,12 +365,6 @@ static void on_audio_data_in()
 		}
 
 		return;
-	}
-
-	if (USB->EP1R & USB_EP_DTOG_RX) {
-		din = (int16_t *) usb_pma_addr(1, PMA_RX);
-	} else {
-		din = (int16_t *) usb_pma_addr(1, PMA_TX);
 	}
 
 	for (int i = 0; i < samples; i++) {
@@ -409,10 +403,10 @@ static void on_audio_data_in()
 	}
 }
 
-static void on_correct_transfer(uint8_t ep)
+static void on_correct_transfer(uint8_t ep, uint8_t *data, uint8_t len)
 {
-	if (ep == 0x81) {
-		on_audio_data_in();
+	if (ep == 0x01) {
+		on_audio_data_in(data, len);
 	}
 }
 
