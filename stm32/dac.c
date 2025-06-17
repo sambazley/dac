@@ -78,7 +78,7 @@ static void dma_init()
 	DMA1_Channel3->CCR |= 1 << DMA_CCR_MSIZE_Pos; // 16 bit memory
 	DMA1_Channel3->CCR |= DMA_CCR_CIRC;
 	DMA1_Channel3->CCR |= DMA_CCR_MINC;
-	DMA1_Channel3->CCR |= DMA_CCR_HTIE | DMA_CCR_TCIE;
+	DMA1_Channel3->CCR |= DMA_CCR_TCIE;
 
 	NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 
@@ -107,9 +107,7 @@ void dac_init()
 
 void dac_irq()
 {
-	if (DMA1->ISR & DMA_ISR_HTIF3) {
-		usb_audio_half_sync();
-	} else if (DMA1->ISR & DMA_ISR_TCIF3) {
+	if (DMA1->ISR & DMA_ISR_TCIF3) {
 		usb_audio_complete_sync();
 	}
 

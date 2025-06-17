@@ -58,9 +58,21 @@ static void rcc_init()
 	}
 }
 
+static void crs_init()
+{
+	RCC->APB1ENR |= RCC_APB1ENR_CRSEN;
+
+	RCC->APB1RSTR |= RCC_APB1RSTR_CRSRST;
+	RCC->APB1RSTR &= ~RCC_APB1RSTR_CRSRST;
+
+	CRS->CR |= CRS_CR_AUTOTRIMEN;
+	CRS->CR |= CRS_CR_CEN;
+}
+
 void boot()
 {
 	rcc_init();
+	crs_init();
 	uart_init();
 
 	uart_send_str("[2J");
