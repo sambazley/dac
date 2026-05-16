@@ -7,7 +7,7 @@ AS = arm-none-eabi-as
 OBJCOPY = arm-none-eabi-objcopy
 
 CFLAGS += -std=c99 -mcpu=cortex-m0 -Wall -Wextra -Wpedantic -mthumb
-LDFLAGS = -Tstm32.ld -mcpu=cortex-m0 -lc -lnosys -mthumb -Wl,--gc-sections
+LDFLAGS = -Tstm32.ld -mcpu=cortex-m0 -lnosys -lc -mthumb -Wl,--gc-sections
 
 CFLAGS += -DSTM32F042x6
 
