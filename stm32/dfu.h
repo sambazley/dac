@@ -17,44 +17,11 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include "uart.h"
-#include "dfu.h"
-#include <string.h>
 
-static inline void copy_data()
-{
-	extern char _sdata, _edata, _sidata;
+#ifndef DFU_H
+#define DFU_H
 
-	memcpy(&_sdata, &_sidata, &_edata - &_sdata);
-}
+void dfu_enter();
+void dfu_reset_if_updated();
 
-static inline void clear_bss()
-{
-	extern char _sbss, _ebss;
-
-	memset(&_sbss, 0, &_ebss - &_sbss);
-}
-
-void Reset_Handler()
-{
-	extern int boot();
-	extern void __libc_init_array();
-
-	dfu_reset_if_updated();
-
-	copy_data();
-	clear_bss();
-
-	__libc_init_array();
-
-	boot();
-
-	while (1) {
-		__asm__ __volatile__("NOP");
-	}
-}
-
-void Hard_Fault()
-{
-	uart_send_str("hard fault\n");
-}
+#endif /* DFU_H */

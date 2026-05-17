@@ -1,4 +1,4 @@
-OBJS=boot.o vec.o main.o dac.o io.o spdif.o uart.o usb.o
+OBJS=boot.o dfu.o vec.o main.o dac.o io.o spdif.o uart.o usb.o
 DEPS=$(OBJS:.o=.d)
 
 CC = arm-none-eabi-gcc
@@ -45,6 +45,10 @@ else
 	st-flash --reset write $^ 0x08000000
 endif
 
+dfu: stm32.bin
+	-dfu-util -e
+	dfu-util -w -d 0483:df11 -a 0 -s 0x08000000:leave -D stm32.bin
+
 %.d: %.c
 	$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) > $@
 
@@ -55,4 +59,4 @@ clean:
 	rm -f $(OBJS) $(DEPS) stm32 stm32.bin
 	make -C libstm32usb clean
 
-.PHONY: all flash clean
+.PHONY: all flash dfu clean

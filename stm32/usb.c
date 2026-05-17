@@ -18,6 +18,7 @@
  */
 
 #include "usb.h"
+#include "dfu.h"
 #include "uart.h"
 #include <usblib.h>
 #include <stm32f0xx.h>
@@ -48,13 +49,17 @@ static const uint8_t device_descriptor [] = {
 #define LSB(x) ((x) & 0xFF)
 
 #define AUDIO_CONT_SIZE (9 + 12 + 9)
-#define CFG_CONT_SIZE (9 + 9 + AUDIO_CONT_SIZE + 9 + 9 + 7 + 11 + 7 + 7)
+#define IFACE0_SIZE (9 + AUDIO_CONT_SIZE)
+#define IFACE1_SIZE (9 + 9 + 7 + 11 + 7 + 7)
+#define IFACE2_SIZE (9 + 9)
+
+#define CFG_CONT_SIZE (9 + IFACE0_SIZE + IFACE1_SIZE + IFACE2_SIZE)
 
 static const uint8_t config1_descriptor [] = {
 	9,                                          // bLength (constant)
 	2,                                          // bDescriptorType (configuration)
 	LSB(CFG_CONT_SIZE), MSB(CFG_CONT_SIZE),     // wTotalLength
-	2,                                          // bNumInterfaces
+	3,                                          // bNumInterfaces
 	1,                                          // bConfigurationValue
 	0,                                          // iConfiguration
 	0x80,                                       // bmAttributes
@@ -157,6 +162,24 @@ static const uint8_t config1_descriptor [] = {
 		0,                                          // bmAttributes
 		0,                                          // bLockDelayUnits (none)
 		0, 0,                                       // wLockDelay (0 ms)
+
+	//interface 2 (DFU)
+	9,                                          // bLength
+	4,                                          // bDescriptorType (interface)
+	2,                                          // bInterfaceNumber
+	0,                                          // bAlternateSetting
+	0,                                          // bNumEndpoints
+	0xFE,                                       // bInterfaceClass (application specific)
+	0x01,                                       // bInterfaceSubClass (DFU)
+	0x01,                                       // bInterfaceProtocol (runtime)
+	0,                                          // iInterface
+
+		9,                                          // bLength
+		0x21,                                       // bDescriptorType (DFU)
+		0x0B,                                       // bmAttributes (can download, can upload, will detach)
+		0xFA, 0x00,                                 // wDetachTimeOut (250 ms)
+		0x40, 0x00,                                 // wTransferSize (64)
+		0x10, 0x01,                                 // bcdDFUVersion (1.10)
 };
 
 static const uint8_t lang_str [] = {
@@ -217,23 +240,44 @@ static struct usb_descriptor descriptors [] = {
 	DESCRIPTOR(DESC_STRING, 3, 0x0409, serial_no_str),
 };
 
+enum {
+	REQ_DFU_DETACH    = 0x00,
+	REQ_DFU_GETSTATUS = 0x03,
+	REQ_SET_INTERFACE = 0x0B
+};
+
 static void on_control_out_interface0(struct usb_interface *iface,
 		struct usb_setup_packet *sp)
 {
 	(void) iface;
 
+	uart_send_str("== UNHANDLED INTERFACE 0 REQUEST ");
+	uart_send_int(sp->bRequest);
+	uart_send_str(" ==\n");
+	usb_ack(0);
+}
+
+static void on_control_out_interface2(struct usb_interface *iface,
+		struct usb_setup_packet *sp)
+{
+	(void) iface;
+	static const uint8_t status[6] = {0, 0, 0, 0, 0, 0};
+
 	switch (sp->bRequest) {
+	case REQ_DFU_DETACH:
+		usb_ack(0);
+		dfu_enter();
+		break;
+	case REQ_DFU_GETSTATUS:
+		usb_send_data(0, status, sizeof(status), sp->wLength);
+		break;
 	default:
-		uart_send_str("== UNHANDLED INTERFACE 0 REQUEST ");
+		uart_send_str("== UNHANDLED INTERFACE 2 REQUEST ");
 		uart_send_int(sp->bRequest);
 		uart_send_str(" ==\n");
 		usb_ack(0);
 	}
 }
-
-enum {
-	REQ_SET_INTERFACE = 11
-};
 
 static void on_control_out_interface1(struct usb_interface *iface,
 		struct usb_setup_packet *sp)
@@ -272,6 +316,7 @@ static void on_control_out_interface1(struct usb_interface *iface,
 static struct usb_interface interfaces [] = {
 	{0, 0, on_control_out_interface0},
 	{1, 0, on_control_out_interface1},
+	{2, 0, on_control_out_interface2},
 };
 
 static volatile int audio_en;
